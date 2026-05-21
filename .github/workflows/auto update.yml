@@ -19,9 +19,7 @@ jobs:
     - name: Checkout Sources
       uses: actions/checkout@main
       with:
-        token: ${{ secrets.FOR_PVE }}
-        persist-credentials: true
-        fetch-depth: 0
+        token: ${{ secrets.GITHUB_TOKEN }}
       
     - name: Initialization environment
       env:
