@@ -20,6 +20,8 @@ jobs:
       uses: actions/checkout@main
       with:
         token: ${{ secrets.FOR_PVE }}
+        persist-credentials: true
+        fetch-depth: 0
       
     - name: Initialization environment
       env:
