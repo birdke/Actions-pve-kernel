@@ -19,7 +19,7 @@ jobs:
     - name: Checkout Sources
       uses: actions/checkout@main
       with:
-        token: ${{ secrets.REPO_TOKEN }}
+        token: ${{ secrets.FOR_PVE }}
       
     - name: Initialization environment
       env:
