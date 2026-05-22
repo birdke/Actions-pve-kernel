@@ -1,3 +1,5 @@
+
+
 name: Build pve-kernel
 
 on:
@@ -23,6 +25,26 @@ jobs:
     if: github.event.repository.owner.id == github.event.sender.id
 
     steps:
+    # 步骤 1：必须放在第一位！先扩容磁盘，再做其他任何事
+    - name: Maximize Build Space (针对PVE内核优化)
+      uses: easimon/maximize-build-space@master
+      with:
+        # 如果你后面需要用 Docker 编译，请取消下行的注释并设为 25600 (25GB)
+        # root-reserve-mb: 25600 
+        
+        # 留 2GB 虚拟内存防止编译时内存溢出(OOM)
+        swap-size-mb: 2048
+        
+        # 彻底移除不需要的超大预装环境（全力压榨空间）
+        remove-dotnet: 'true'
+        remove-android: 'true'
+        remove-haskell: 'true'
+        remove-codeql: 'true'
+        remove-docker-images: 'true'
+        
+        # 允许 LVM 超额配置空间
+        overprovision-lvm: 'true'
+    
     - name: Checkout
       uses: actions/checkout@main
     
