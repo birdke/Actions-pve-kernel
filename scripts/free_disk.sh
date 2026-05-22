@@ -22,4 +22,7 @@ rm -rf /usr/lib/jvm
 rm -rf /usr/share/az_*
 rm -rf /opt/pipx
 rm -rf /opt/hostedtoolcache
-docker system prune -af
+docker rmi $(docker image ls -q --filter "reference=node*")
+docker rmi $(docker image ls -q --filter "reference=buildpack*")
+docker rmi $(docker image ls -q --filter "reference=alpine*")
+docker rmi $(docker image ls -q --filter "reference=ubuntu*")
