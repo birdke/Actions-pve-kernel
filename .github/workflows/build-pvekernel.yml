@@ -1,5 +1,3 @@
-
-
 name: Build pve-kernel
 
 on:
@@ -72,11 +70,6 @@ jobs:
       run: |
         cd pve-kernel
         sed -i "s/rules fwcheck abicheck/rules abicheck/" debian/rules
-
-    - name: Update ABI files
-      run: |
-        cd pve-kernel
-        debian/rules updateabi
         
     - name: Freeing up disk space on CI system
       run: |
