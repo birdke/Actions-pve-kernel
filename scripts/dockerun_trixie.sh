@@ -15,4 +15,4 @@ apt-get install -y git nano screen patch fakeroot build-essential devscripts lib
 df -h
 useradd build -d /home/build/pve-kernel
 chown -R build /home/build/pve-kernel
-su - build -c "make"
+su - build -c "export IGNORE_ABI=1 && make"
