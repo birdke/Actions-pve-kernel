@@ -33,7 +33,7 @@ jobs:
         # root-reserve-mb: 25600 
         
         # 留 2GB 虚拟内存防止编译时内存溢出(OOM)
-        swap-size-mb: 2048
+        swap-size-mb: 8192
         
         # 彻底移除不需要的超大预装环境（全力压榨空间）
         remove-dotnet: 'true'
