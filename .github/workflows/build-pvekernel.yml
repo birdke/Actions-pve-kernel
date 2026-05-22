@@ -23,99 +23,80 @@ jobs:
     if: github.event.repository.owner.id == github.event.sender.id
 
     steps:
-    # 步骤 1：必须放在第一位！先扩容磁盘，再做其他任何事
-    - name: Maximize Build Space (针对PVE内核优化)
-      uses: easimon/maximize-build-space@master
-      with:
-        # 如果你后面需要用 Docker 编译，请取消下行的注释并设为 25600 (25GB)
-        # root-reserve-mb: 25600 
-        
-        # 留 2GB 虚拟内存防止编译时内存溢出(OOM)
-        swap-size-mb: 8192
-        
-        # 彻底移除不需要的超大预装环境（全力压榨空间）
-        remove-dotnet: 'true'
-        remove-android: 'true'
-        remove-haskell: 'true'
-        remove-codeql: 'true'
-        remove-docker-images: 'true'
-        
-        # 允许 LVM 超额配置空间
-        overprovision-lvm: 'true'
-    
-    - name: Checkout
-      uses: actions/checkout@main
-    
-    - name: Initialization environment
-      env:
-        DEBIAN_FRONTEND: noninteractive
-      run: |
-        git pull
-        #sudo chmod a+x $SCRIPTS_PATH/init_env.sh && sudo -E $SCRIPTS_PATH/init_env.sh
-        
-    - name: Clone source code
-      run: git clone $REPO_URL -b $REPO_BRANCH pve-kernel
-    
-    - name: Fix ACS patch
-      run: |
-        cd pve-kernel
-        sudo chmod a+x $SCRIPTS_PATH/ACS_patch.sh  && $SCRIPTS_PATH/ACS_patch.sh
-    
-    - name: Fix DEBUG_INFO_BTF
-      run: |
-        cd pve-kernel
-        sed -i 's/${LINUX_TOOLS_DBG_DEB}/# ${LINUX_TOOLS_DBG_DEB}/' Makefile
-        
-    - name: Disable fwcheck and abicheck
-      run: |
-        cd pve-kernel
-        sed -i "s/rules fwcheck abicheck/rules/" debian/rules
-        
-    - name: Freeing up disk space on CI system
-      run: |
-        dpkg-query -Wf '${Installed-Size}\t${Package}\n' | sort -n | tail -n 100
-        du -d 4 -ah / | sort -h | tail -n 100
-        df -h
-        sudo chmod a+x $SCRIPTS_PATH/free_disk.sh && sudo $SCRIPTS_PATH/free_disk.sh
-        df -h
-        
-    - name: Setting up Docker Environment
-      run: |
-        sudo apt-get install ca-certificates curl gnupg lsb-release
-        sudo mkdir -m 0755 -p /etc/apt/keyrings
-        curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
-        sudo chmod a+r /etc/apt/keyrings/docker.gpg
-        echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
-        sudo apt-get update
-        sudo apt-get install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+      - name: Checkout
+        uses: actions/checkout@main
 
-    - name: Compile the PVE kernel
-      id: compile
-      run: |
-        sudo chmod a+x $SCRIPTS_PATH/dockerun_trixie.sh
-        sudo docker run -v ${{ github.workspace }}:/home/build debian:trixie /home/build/scripts/dockerun_trixie.sh
-        #cd pve-kernel
-        #make
-        echo "status=success" >> $GITHUB_OUTPUT
-  
-    - name: Create Release Directory
-      if: steps.compile.outputs.status == 'success' && env.UPLOAD_BIN_DIR == 'true'
-      run: |
-        sudo chmod a+w pve-kernel
-        cd pve-kernel
-        mkdir release
-        cp *deb release/
-        
-    - name: Init version number
-      id: getverion
-      if: steps.compile.outputs.status == 'success' && env.UPLOAD_BIN_DIR == 'true'
-      run: |
-        cd pve-kernel
-        echo "version=$(ls abi-prev* | sed  's/abi-prev/pve-kernel/g' | sed 's/-pve//g')" >> $GITHUB_OUTPUT
-      
-    - name: Upload kernel directory
-      uses: actions/upload-artifact@master
-      if: steps.compile.outputs.status == 'success' && env.UPLOAD_BIN_DIR == 'true'
-      with:
-        name: ${{ format('{0}-roforest', steps.getverion.outputs.version) }} 
-        path: pve-kernel/release
+      - name: Initialization environment
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          git pull
+          #sudo chmod a+x $SCRIPTS_PATH/init_env.sh && sudo -E $SCRIPTS_PATH/init_env.sh
+
+      - name: Clone source code
+        run: git clone $REPO_URL -b $REPO_BRANCH pve-kernel
+
+      - name: Fix ACS patch
+        run: |
+          cd pve-kernel
+          sudo chmod a+x $SCRIPTS_PATH/ACS_patch.sh  && $SCRIPTS_PATH/ACS_patch.sh
+
+      - name: Fix DEBUG_INFO_BTF
+        run: |
+          cd pve-kernel
+          sed -i 's/${LINUX_TOOLS_DBG_DEB}/# ${LINUX_TOOLS_DBG_DEB}/' Makefile
+
+      - name: Disable fwcheck
+        run: |
+          cd pve-kernel
+          sed -i "s/rules fwcheck abicheck/rules abicheck/" debian/rules
+
+      - name: Freeing up disk space on CI system
+        continue-on-error: true
+        run: |
+          dpkg-query -Wf '${Installed-Size}\t${Package}\n' | sort -n | tail -n 100
+          du -d 4 -ah / | sort -h | tail -n 100
+          df -h
+          sudo chmod a+x $SCRIPTS_PATH/free_disk.sh && sudo $SCRIPTS_PATH/free_disk.sh || true
+          df -h
+
+      - name: Setting up Docker Environment
+        run: |
+          sudo apt-get install ca-certificates curl gnupg lsb-release
+          sudo mkdir -m 0755 -p /etc/apt/keyrings
+          curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+          sudo chmod a+r /etc/apt/keyrings/docker.gpg
+          echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+          sudo apt-get update
+          sudo apt-get install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+
+      - name: Compile the PVE kernel
+        id: compile
+        run: |
+          sudo chmod a+x $SCRIPTS_PATH/dockerun_trixie.sh
+          sudo docker run -v ${{ github.workspace }}:/home/build debian:trixie /home/build/scripts/dockerun_trixie.sh
+          #cd pve-kernel
+          #make
+          echo "status=success" >> $GITHUB_OUTPUT
+
+      - name: Create Release Directory
+        if: steps.compile.outputs.status == 'success' && env.UPLOAD_BIN_DIR == 'true'
+        run: |
+          sudo chmod a+w pve-kernel
+          cd pve-kernel
+          mkdir release
+          cp *deb release/
+
+      - name: Init version number
+        id: getverion
+        if: steps.compile.outputs.status == 'success' && env.UPLOAD_BIN_DIR == 'true'
+        run: |
+          cd pve-kernel
+          echo "version=$(ls abi-prev* | sed  's/abi-prev/pve-kernel/g' | sed 's/-pve//g')" >> $GITHUB_OUTPUT
+
+      - name: Upload kernel directory
+        uses: actions/upload-artifact@master
+        if: steps.compile.outputs.status == 'success' && env.UPLOAD_BIN_DIR == 'true'
+        with:
+          name: ${{ format('{0}-roforest', steps.getverion.outputs.version) }}
+          path: pve-kernel/release
