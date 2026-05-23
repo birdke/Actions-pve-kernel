@@ -8,6 +8,9 @@ on:
     paths:
       - '.configmaster'
 
+permissions:
+  contents: write
+
 env:
   REPO_URL: https://git.proxmox.com/git/pve-kernel.git
   REPO_BRANCH: master
@@ -24,15 +27,14 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@main
+        uses: actions/checkout@v4
 
       - name: Initialization environment
         env:
           DEBIAN_FRONTEND: noninteractive
         run: |
           git pull
-          #sudo chmod a+x $SCRIPTS_PATH/init_env.sh && sudo -E $SCRIPTS_PATH/init_env.sh
-
+          
       - name: Clone source code
         run: git clone $REPO_URL -b $REPO_BRANCH pve-kernel
 
@@ -40,18 +42,17 @@ jobs:
         run: |
           cd pve-kernel
           sudo chmod a+x $SCRIPTS_PATH/ACS_patch.sh  && $SCRIPTS_PATH/ACS_patch.sh
-
+          
       - name: Fix DEBUG_INFO_BTF
         run: |
           cd pve-kernel
           sed -i 's/${LINUX_TOOLS_DBG_DEB}/# ${LINUX_TOOLS_DBG_DEB}/' Makefile
-
+          
       - name: Disable fwcheck and abicheck
         run: |
           cd pve-kernel
-          # 使用 | 作为 sed 分隔符，把整行调用安全替换为 true
           sed -i 's|debian/rules fwcheck abicheck|true|g' debian/rules
-
+          
       - name: Freeing up disk space on CI system
         continue-on-error: true
         run: |
@@ -60,7 +61,7 @@ jobs:
           df -h
           sudo chmod a+x $SCRIPTS_PATH/free_disk.sh && sudo $SCRIPTS_PATH/free_disk.sh || true
           df -h
-
+          
       - name: Setting up Docker Environment
         run: |
           sudo apt-get install ca-certificates curl gnupg lsb-release
@@ -70,16 +71,14 @@ jobs:
           echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
           sudo apt-get update
           sudo apt-get install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
-
+          
       - name: Compile the PVE kernel
         id: compile
         run: |
           sudo chmod a+x $SCRIPTS_PATH/dockerun_trixie.sh
           sudo docker run -v ${{ github.workspace }}:/home/build debian:trixie /home/build/scripts/dockerun_trixie.sh
-          #cd pve-kernel
-          #make
           echo "status=success" >> $GITHUB_OUTPUT
-
+          
       - name: Create Release Directory
         if: steps.compile.outputs.status == 'success' && env.UPLOAD_BIN_DIR == 'true'
         run: |
@@ -87,17 +86,37 @@ jobs:
           cd pve-kernel
           mkdir release
           cp *deb release/
-
+          
       - name: Init version number
-        id: getverion
+        id: getversion
         if: steps.compile.outputs.status == 'success' && env.UPLOAD_BIN_DIR == 'true'
         run: |
           cd pve-kernel
           echo "version=$(ls abi-prev* | sed  's/abi-prev/pve-kernel/g' | sed 's/-pve//g')" >> $GITHUB_OUTPUT
 
+      # 💡 新增步骤：将所有 deb 包打包压缩成一个 zip 文件
+      - name: Package Release into ZIP
+        if: steps.compile.outputs.status == 'success' && env.UPLOAD_BIN_DIR == 'true'
+        run: |
+          cd pve-kernel
+          # 使用 -j 参数可以让压缩包内不包含 release/ 目录层级，解压后直接是 deb 文件
+          zip -j "${{ steps.getversion.outputs.version }}-roforest.zip" release/*.deb
+          
       - name: Upload kernel directory
-        uses: actions/upload-artifact@master
+        uses: actions/upload-artifact@v4
         if: steps.compile.outputs.status == 'success' && env.UPLOAD_BIN_DIR == 'true'
         with:
-          name: ${{ format('{0}-roforest', steps.getverion.outputs.version) }}
+          name: ${{ format('{0}-roforest', steps.getversion.outputs.version) }}
           path: pve-kernel/release
+
+      # 💡 修改后的发布步骤：只上传刚打包好的 ZIP 压缩包
+      - name: Upload to GitHub Releases
+        uses: softprops/action-gh-release@v2
+        if: steps.compile.outputs.status == 'success' && env.UPLOAD_BIN_DIR == 'true'
+        with:
+          tag_name: ${{ steps.getversion.outputs.version }}
+          # 明确指定上传刚才生成的 zip 文件，而不再使用 *.deb 匹配
+          files: pve-kernel/${{ steps.getversion.outputs.version }}-roforest.zip
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
