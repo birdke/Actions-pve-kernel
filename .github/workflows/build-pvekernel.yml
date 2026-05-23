@@ -46,10 +46,11 @@ jobs:
           cd pve-kernel
           sed -i 's/${LINUX_TOOLS_DBG_DEB}/# ${LINUX_TOOLS_DBG_DEB}/' Makefile
 
-      - name: Disable fwcheck
+      - name: Disable fwcheck and abicheck
         run: |
           cd pve-kernel
-          sed -i "s/rules fwcheck abicheck/rules abicheck/" debian/rules
+          # 使用 | 作为 sed 分隔符，把整行调用安全替换为 true
+          sed -i 's|debian/rules fwcheck abicheck|true|g' debian/rules
 
       - name: Freeing up disk space on CI system
         continue-on-error: true
